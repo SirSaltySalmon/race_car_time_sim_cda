@@ -3,17 +3,18 @@ Mass model for the canister car accounting for gas loss during operation.
 """
 
 import numpy as np
-from constants import MASS_BASE, MASS_COEFF_NUM, MASS_COEFF_DEN, MASS_CENTER, MASS_MAX_X
+from constants import MASS_BASE, MASS_BASE_M, MASS_COEFF_NUM, MASS_COEFF_DEN, MASS_CENTER, MASS_MAX_X
 
 
-def mass(x):
+def mass(x, mass_value=MASS_BASE_M):
     """
     Mass function accounting for compressed gas loss.
     
     x represents time in seconds.
     
-    m(x) = 0.0694 + (0.008 * 40000^2 / 51211^2) * (x - 1.280275)^2
-    
+    m(x) = (0.0214 + M) + (0.008 * 40000^2 / 51211^2) * (x - 1.280275)^2
+    Where M is the inputted mass of the car
+
     Valid for: 0 ≤ x ≤ 1.280275 (while canister is firing)
     After x > 1.280275, mass remains constant at MASS_BASE (canister empty)
     
@@ -26,13 +27,13 @@ def mass(x):
     # Handle scalar input
     if np.isscalar(x):
         if x < 0:
-            return MASS_BASE
+            return MASS_BASE + mass_value
         elif x <= MASS_MAX_X:
             coefficient = MASS_COEFF_NUM / MASS_COEFF_DEN
-            return MASS_BASE + coefficient * (x - MASS_CENTER) ** 2
+            return MASS_BASE + mass_value + coefficient * (x - MASS_CENTER) ** 2
         else:
             # After canister is empty, mass remains constant at base value
-            return MASS_BASE
+            return MASS_BASE + mass_value
     
     # Handle array input
     x = np.asarray(x)
@@ -41,15 +42,15 @@ def mass(x):
     
     # Region 1: 0 ≤ x ≤ 1.280275 (gas is being expelled)
     mask_active = (x >= 0) & (x <= MASS_MAX_X)
-    result[mask_active] = MASS_BASE + coefficient * (x[mask_active] - MASS_CENTER) ** 2
+    result[mask_active] = MASS_BASE + mass_value + coefficient * (x[mask_active] - MASS_CENTER) ** 2
     
     # Region 2: x > 1.280275 (canister empty, constant mass)
     mask_empty = x > MASS_MAX_X
-    result[mask_empty] = MASS_BASE
+    result[mask_empty] = MASS_BASE + mass_value
     
     # Region 3: x < 0 (shouldn't happen, but handle gracefully)
     mask_negative = x < 0
-    result[mask_negative] = MASS_BASE
+    result[mask_negative] = MASS_BASE + mass_value
     
     return result
 

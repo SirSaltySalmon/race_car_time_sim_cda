@@ -119,10 +119,30 @@ class CanisterCarGUI:
                  foreground="gray", font=("", 9)).grid(
             row=2, column=3, sticky=tk.W, pady=(10, 0)
         )
+
+        # Mass input
+        ttk.Label(input_frame, text="Base Mass:").grid(
+            row=3, column=0, sticky=tk.W, padx=(0, 10), pady=(10, 0)
+        )
+        
+        from constants import MASS_BASE_M
+        self.mass_var = tk.StringVar(value=str(MASS_BASE_M))
+        self.mass_entry = ttk.Entry(input_frame, textvariable=self.mass_var, width=15)
+        self.mass_entry.grid(row=3, column=1, sticky=tk.W, padx=(0, 10), pady=(10, 0))
+        
+        ttk.Label(input_frame, text="kg", foreground="gray").grid(
+            row=3, column=2, sticky=tk.W, padx=(0, 20), pady=(10, 0)
+        )
+        
+        # Info label for mass
+        ttk.Label(input_frame, text="(Base mass of the car, default: 0.048 kg)", 
+                 foreground="gray", font=("", 9)).grid(
+            row=3, column=3, sticky=tk.W, pady=(10, 0)
+        )
         
         # Buttons
         button_frame = ttk.Frame(input_frame)
-        button_frame.grid(row=3, column=0, columnspan=4, pady=(10, 0))
+        button_frame.grid(row=4, column=0, columnspan=4, pady=(10, 0))
         
         self.calculate_button = ttk.Button(
             button_frame, text="Calculate", command=self._on_calculate
@@ -138,6 +158,7 @@ class CanisterCarGUI:
         self.cda_entry.bind('<Return>', lambda e: self._on_calculate())
         self.interp_time_entry.bind('<Return>', lambda e: self._on_calculate())
         self.accuracy_entry.bind('<Return>', lambda e: self._on_calculate())
+        self.mass_entry.bind('<Return>', lambda e: self._on_calculate())
 
     def _create_results_section(self, parent):
         """Create results display section."""
@@ -291,21 +312,35 @@ class CanisterCarGUI:
             messagebox.showwarning("Large Accuracy Value", 
                                 "Large accuracy values may slow down calculation.")
         
+        # Get mass value
+        try:
+            mass_value = float(self.mass_var.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", 
+                               "Please enter a valid number for mass.")
+            return
+        
+        # Validate mass
+        if mass_value <= 0:
+            messagebox.showerror("Invalid Input", 
+                               "Mass must be positive.")
+            return
+        
         # Run calculation in separate thread
         self.calculating = True
         self.calculate_button.config(state='disabled')
-        self.status_var.set(f"Calculating for CdA = {cda:.4f} m²...")
+        self.status_var.set(f"Calculating for CdA = {cda:.4f} m², Mass = {mass_value:.4f} kg...")
         self.progress.start(10)
         
-        calc_thread = threading.Thread(target=self._run_calculation, args=(cda, interp_time, accuracy))
+        calc_thread = threading.Thread(target=self._run_calculation, args=(cda, interp_time, accuracy, mass_value))
         calc_thread.daemon = True
         calc_thread.start()
     
-    def _run_calculation(self, cda, interp_time, accuracy):
+    def _run_calculation(self, cda, interp_time, accuracy, mass_value):
         """Run the calculation (called in separate thread)."""
         try:
             # Solve the dynamics (use interp_time as max_time for solver)
-            result = solve_canister_car(cda, interp_time, accuracy)
+            result = solve_canister_car(cda, interp_time, accuracy, mass_value)
             
             # Store interpolation time in result for later use
             result.interp_time = interp_time
@@ -401,8 +436,10 @@ class CanisterCarGUI:
     
     def _on_clear(self):
         """Handle clear button click."""
+        from constants import MASS_BASE_M
         self.cda_var.set(str(DEFAULT_CDA))
         self.interp_time_var.set("10.0")
+        self.mass_var.set(str(MASS_BASE_M))
         self._clear_results()
         self._show_welcome_message()
         self.status_var.set("Ready")

@@ -19,14 +19,15 @@ Process:
 
 import numpy as np
 from scipy.integrate import cumulative_trapezoid
-from constants import TARGET_DISPLACEMENT
+from constants import TARGET_DISPLACEMENT, MASS_BASE_M
 
 
 class IntegrationResult:
     """Container for integration results."""
     
     def __init__(self, success, message, t=None, v=None, s=None, 
-                 time_to_20m=None, top_speed=None, top_speed_time=None):
+                 time_to_20m=None, top_speed=None, top_speed_time=None,
+                 forces=None):
         self.success = success
         self.message = message
         self.t = t  # Time array
@@ -35,9 +36,22 @@ class IntegrationResult:
         self.time_to_20m = time_to_20m
         self.top_speed = top_speed
         self.top_speed_time = top_speed_time
+        # Forces computed during integration (for reuse)
+        if forces is not None:
+            self.canister_force = forces['canister']
+            self.drag_force = forces['drag']
+            self.net_force = forces['net']
+            self.acceleration = forces['acceleration']
+            self.mass_values = forces['mass']
+        else:
+            self.canister_force = None
+            self.drag_force = None
+            self.net_force = None
+            self.acceleration = None
+            self.mass_values = None
 
 
-def integrate_motion(cda, canister_force_func, mass_func, drag_force_func, max_time=10.0, accuracy=0.000001):
+def integrate_motion(cda, canister_force_func, mass_func, drag_force_func, max_time=10.0, accuracy=0.000001, mass_value=MASS_BASE_M):
     """
     Args:
         cda: Drag coefficient times reference area
@@ -65,7 +79,7 @@ def integrate_motion(cda, canister_force_func, mass_func, drag_force_func, max_t
     print(f"F_canister at t=0.1: {F_canister[int(0.1/dt)]:.6e}")
     
     # Step 2: Get mass at all times
-    m = mass_func(t)
+    m = mass_func(t, mass_value)
     print(f"Mass: min={np.min(m):.6e}, max={np.max(m):.6e}")
     print(f"Mass at t=0: {m[0]:.6e}")
     
@@ -153,6 +167,17 @@ def integrate_motion(cda, canister_force_func, mass_func, drag_force_func, max_t
         top_speed = None
         top_speed_time = None
     
+    # Package forces computed during integration for reuse
+    # Note: Use actual velocity for drag force (not v_nodrag) for consistency
+    F_drag_actual = drag_force_func(v_actual, cda)
+    forces = {
+        'canister': F_canister,
+        'drag': F_drag_actual,
+        'net': F_canister - F_drag_actual,
+        'acceleration': a_actual,
+        'mass': m
+    }
+    
     return IntegrationResult(
         success=True,
         message=message,
@@ -161,5 +186,6 @@ def integrate_motion(cda, canister_force_func, mass_func, drag_force_func, max_t
         s=s,
         time_to_20m=time_to_20m,
         top_speed=top_speed,
-        top_speed_time=top_speed_time
+        top_speed_time=top_speed_time,
+        forces=forces
     )
